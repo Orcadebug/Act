@@ -1,0 +1,79 @@
+<Window x:Class="PredictiveDesktopLayer.UI.Windows.SuggestionOverlay"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="Suggestion"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        SizeToContent="WidthAndHeight">
+
+    <Window.Resources>
+
+        <Style x:Key="ActionButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="#2D2D2D"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="Margin" Value="4,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                CornerRadius="4"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#3D3D3D"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter Property="Background" Value="#1D1D1D"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Border Background="#E8202020" CornerRadius="8" Padding="16" Margin="10">
+        <Border.Effect>
+            <DropShadowEffect Color="Black" BlurRadius="20" ShadowDepth="2" Opacity="0.6"/>
+        </Border.Effect>
+
+        <StackPanel>
+            <TextBlock Text="{Binding Description}"
+                       Foreground="White"
+                       FontSize="14"
+                       FontWeight="Medium"
+                       TextWrapping="Wrap"
+                       MaxWidth="350"/>
+
+            <TextBlock Foreground="#888888"
+                       FontSize="11"
+                       Margin="0,4,0,12">
+                <Run Text="Confidence: "/>
+                <Run Text="{Binding Confidence, StringFormat=P0}"/>
+                <Run Text=" | Alt to approve, Alt+Alt to dismiss"/>
+            </TextBlock>
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="Dismiss"
+                        Command="{Binding DismissCommand}"
+                        Style="{StaticResource ActionButtonStyle}"/>
+                <Button Content="Approve"
+                        Command="{Binding ApproveCommand}"
+                        Style="{StaticResource ActionButtonStyle}"
+                        Background="#0078D4"/>
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</Window>

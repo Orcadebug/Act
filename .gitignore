@@ -1,0 +1,67 @@
+# Build outputs
+bin/
+obj/
+out/
+
+# IDE folders
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# NuGet
+*.nupkg
+packages/
+.nuget/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.env
+*.egg-info/
+dist/
+build/
+
+# Logs
+logs/
+*.log
+*.log.*
+
+# Local settings
+appsettings.Development.json
+appsettings.Local.json
+*.local.json
+
+# AI assistant folders
+.claude/
+.copilot/
+.agent/
+.gemini/
+.cursor/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Windows reserved files
+nul
+
+# LiteDB
+*.db
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+
+# Docker
+.docker/

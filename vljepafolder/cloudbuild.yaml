@@ -1,0 +1,71 @@
+# Cloud Build configuration for VL-JEPA Server
+# This file enables automated builds when pushing to a repo
+
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/vljepa-server:$COMMIT_SHA'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/vljepa-server:latest'
+      - '.'
+    timeout: '1800s'  # 30 min timeout for large image builds
+
+  # Push to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/vljepa-server:$COMMIT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/vljepa-server:latest'
+
+  # Deploy to Cloud Run with GPU
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'vljepa-server'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/vljepa-server:$COMMIT_SHA'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--memory'
+      - '16Gi'
+      - '--cpu'
+      - '4'
+      - '--gpu'
+      - '1'
+      - '--gpu-type'
+      - 'nvidia-l4'
+      - '--min-instances'
+      - '0'
+      - '--max-instances'
+      - '1'
+      - '--timeout'
+      - '300'
+      - '--concurrency'
+      - '10'
+      - '--port'
+      - '8080'
+      - '--allow-unauthenticated'
+      - '--no-cpu-throttling'
+      - '--execution-environment'
+      - 'gen2'
+
+images:
+  - 'gcr.io/$PROJECT_ID/vljepa-server:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/vljepa-server:latest'
+
+timeout: '2400s'  # 40 min total timeout
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: 'E2_HIGHCPU_8'  # Faster builds

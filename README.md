@@ -1,8 +1,7 @@
-# Pulse — Friction-Aware Desktop Intelligence
-
+# ACT
 > **This is an early-stage demo.** Core signal collection, friction scoring, and the nudge pipeline work, but the system is not well-tuned and will produce noisy or poorly-timed suggestions in real use. Expect rough edges.
 
-Pulse is a Windows desktop app that watches your behavior in real time, detects when you're stuck, and delivers a proactive AI-powered suggestion in a floating overlay — without you having to ask.
+ACT is a Windows desktop app that watches your behavior in real time, detects when you're stuck, and delivers a proactive AI-powered suggestion in a floating overlay — without you having to ask.
 
 It monitors signals like typing hesitation, app-switching, dwell time, scroll velocity, clipboard cycling, and error dialogs. When those signals cross a threshold, it takes a screenshot, reads the screen with OCR, redacts PII, and asks the Perplexity API for the most useful next step given your context.
 

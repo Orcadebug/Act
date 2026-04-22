@@ -1,12 +1,48 @@
 # ACT — Friction-Aware Desktop Intelligence
 
-> **Early-stage demo. Expect rough edges and broken behavior.** The core signal collection, friction scoring, and two-stage LLM pipeline are implemented but not well-tuned. Nudges may fire at wrong times, the Tinker endpoint is assumed to be OpenAI-compatible (you'll need to confirm your actual endpoint), and the overall system has seen limited real-world testing.
+> **Early-stage demo. Expect rough edges and broken behavior.** The core signal collection, friction scoring, and two-stage LLM pipeline are implemented but not well-tuned. Nudges may fire at wrong times, the Tinker endpoint is assumed to be OpenAI-compatible (confirm your actual endpoint with Thinking Machines), and the overall system has seen limited real-world testing.
 
 ACT is a Windows desktop app that watches your behavior in real time, detects when you seem stuck, runs your screen context through a fine-tuned intent model, and delivers a proactive AI-powered suggestion in a floating translucent overlay — without you having to ask.
 
 ---
 
-## How It Works
+## Versions
+
+### Version 1 — Predictive Desktop Layer + VL-JEPA (`PredictiveDesktopLayer/` + `vljepafolder/`)
+
+The original version of ACT was a **vision-based desktop automation system**. It worked by continuously capturing screen frames and sending them to a VL-JEPA (Vision-Language Joint-Embedding Predictive Architecture) model hosted on Google Cloud Run (NVIDIA L4 GPU). The model predicted what action the user was about to take or should take next, returning structured output like:
+
+```json
+{
+  "confidence": 0.92,
+  "description": "Click the Save button",
+  "actions": [{ "type": "click", "target": "Save button", "region": { "x": 450, "y": 320, "width": 80, "height": 30 } }]
+}
+```
+
+A separate C# / .NET 8 Windows layer (`PredictiveDesktopLayer`) consumed these predictions and executed them — handling clicks, drags, typing, scrolls, and key presses via a state machine (`PulseStateMachine`) and action executor.
+
+**Stack:** C# .NET 8 (WPF overlay, action execution) + Python FastAPI on Cloud Run GPU (VL-JEPA inference)
+
+**Status:** Build is currently broken (`PredictiveDesktopLayer.Host` has a missing namespace error). The VL-JEPA server scaffold is in `vljepafolder/` — model loading is stubbed out. Not production-ready. The Cloud Run deployment scripts are functional if you bring your own model weights.
+
+**Why it was shelved:** Vision-only prediction without understanding user *intent* produced noisy, poorly-timed interventions. Executing actions automatically without explicit user confirmation is also a high-risk UX pattern.
+
+---
+
+### Version 2 — Tinker + Perplexity + Electron (current, `src/`)
+
+The current version takes a different approach: instead of watching pixels and predicting actions, it watches **behavioral signals** (typing hesitation, app switching, dwell time, scroll patterns, clipboard cycling) to detect friction, uses a fine-tuned **Tinker** intent model to decide *whether* and *what kind of* help is needed, then generates a streamed natural-language response via **Perplexity**.
+
+The result surfaces in a translucent always-on-top overlay — the user reads it, acts on it, and closes it. No automated action execution.
+
+**Stack:** Electron 29 + React 18 + TypeScript + Tailwind CSS + Tinker API (intent) + Perplexity API (response)
+
+**Status:** Active development. See current architecture below.
+
+---
+
+## How It Works (v2)
 
 ```
 SignalCollector (every 2s)
@@ -47,7 +83,7 @@ SignalCollector (every 2s)
 
 ---
 
-## Architecture
+## Architecture (v2)
 
 ### Sense Layer
 
@@ -72,32 +108,30 @@ If `uiohook-napi` fails to load (common if native modules aren't rebuilt), the c
 
 ### Intent Layer
 
-**`TinkerIntentProvider`** (`src/main/llm/tinker.ts`) calls a fine-tuned intent classification model hosted via the Tinker platform. Given the current app, screen text, clipboard, and behavioral signals, it returns:
+**`TinkerIntentProvider`** (`src/main/llm/tinker.ts`) calls a fine-tuned intent classification model via the Tinker platform. Returns:
 
 ```json
 { "goal": "...", "task_type": "...", "confidence": 0.0–1.0, "suggested_tier": "hint|detail|deep_dive" }
 ```
 
-**This is a hard gate.** If the Tinker key is missing, the endpoint is unreachable, confidence is below 0.5, or the response can't be parsed — the nudge is suppressed entirely. No Perplexity call is made.
+**Hard gate** — if the Tinker key is missing, unreachable, confidence < 0.5, or response can't be parsed, the nudge is suppressed. No Perplexity call is made.
 
-The endpoint is assumed to be OpenAI-compatible (`/v1/chat/completions` with JSON mode). You'll need to confirm the real endpoint URL and request schema with Thinking Machines.
+The endpoint is assumed OpenAI-compatible (`/v1/chat/completions` with JSON mode). Confirm the actual URL and schema with Thinking Machines.
 
 ### Nudge Layer
 
-**`TrustManager`** persists an adaptive trust score (0.0–1.0, starts 0.5). Trust sets the friction threshold required to gate into the pipeline; the response tier now comes from Tinker's `suggested_tier`, not trust.
+**`TrustManager`** persists an adaptive trust score (0.0–1.0, starts 0.5) that sets the friction threshold for the pipeline gate. The response tier comes from Tinker's `suggested_tier`, not trust.
 
-**`PerplexityActionProvider`** (`src/main/llm/perplexity.ts`) calls the Perplexity streaming API with a tier-matched system prompt and the classified goal injected. 30s timeout with `AbortController`. HTTP errors and timeouts surface as an error state in the overlay rather than silently hanging.
+**`PerplexityActionProvider`** (`src/main/llm/perplexity.ts`) calls the Perplexity streaming API with a tier-matched system prompt and the classified goal injected. 30s timeout with `AbortController`. HTTP errors and timeouts surface in the overlay rather than silently hanging.
 
 ### UI
 
-Two windows share a single Vite/React/Tailwind build:
-
-- **Overlay** (`#/toast`) — translucent frosted-glass card, always-on-top, bottom-right corner. Shows only the streaming Perplexity response and optional citation hostnames. Single close button. Auto-hides after 30s if ignored.
-- **Settings** (`#/settings`) — configure Tinker key/model/endpoint, Perplexity key/model, overlay opacity, and theme. Advanced section for signal interval, nudge cooldown, and app allowlist.
+- **Overlay** (`#/toast`) — translucent frosted-glass card, always-on-top, bottom-right. Streaming response + citation hostnames + close button. Auto-hides after 30s.
+- **Settings** (`#/settings`) — Tinker key/model/endpoint, Perplexity key/model, overlay opacity, theme, advanced options.
 
 ---
 
-## Tech Stack
+## Tech Stack (v2)
 
 | Layer | Technology |
 |---|---|
@@ -118,12 +152,12 @@ Two windows share a single Vite/React/Tailwind build:
 ## Requirements
 
 ### Tinker API (intent classification — required)
-ACT requires a Tinker API key and a hosted fine-tuned model endpoint from [Thinking Machines](https://thinkingmachin.es/). Without it, zero nudges will fire. Configure the key, model name, and endpoint in Settings after launch.
+ACT requires a Tinker API key and hosted fine-tuned model endpoint from [Thinking Machines](https://thinkingmachin.es/). Without it, zero nudges fire. Configure in Settings after launch.
 
-> **Note:** The default endpoint (`https://api.tinker.thinkingmachines.ai/v1/chat/completions`) is an assumption. Confirm the real endpoint with Thinking Machines before expecting this to work.
+> **Note:** The default endpoint (`https://api.tinker.thinkingmachines.ai/v1/chat/completions`) is an assumption. Confirm the real endpoint before expecting this to work.
 
 ### Perplexity API (response generation — required)
-ACT uses the [Perplexity API](https://www.perplexity.ai/) for streamed responses. You need an API key with access to the `sonar` model family. Set it in Settings or via the env var:
+ACT uses the [Perplexity API](https://www.perplexity.ai/) for streamed responses. API key with `sonar` model family access required.
 
 ```bash
 set PERPLEXITY_API_KEY=your_key_here
@@ -131,7 +165,7 @@ set PERPLEXITY_API_KEY=your_key_here
 
 ---
 
-## Setup
+## Setup (v2)
 
 ```bash
 npm install
@@ -143,28 +177,32 @@ set PERPLEXITY_API_KEY=your_key_here
 npm run dev
 ```
 
-The app runs as a system tray icon. Double-click the tray icon or right-click → Open Settings to configure your API keys. `Ctrl+Shift+P` pauses/resumes monitoring.
+App runs as a tray icon. Double-click tray or right-click → Open Settings to configure API keys. `Ctrl+Shift+P` pauses/resumes.
 
 ---
 
 ## Known Limitations & Rough Edges
 
-- **Tinker endpoint is unverified.** The assumed endpoint URL and request format may not match what Thinking Machines actually provides. If classification always returns null, check the endpoint and auth header first.
-- **No nudges without both keys.** If either key is missing or invalid, the system is silent — there's no degraded fallback mode.
-- **Signal tuning is rough.** The friction threshold, per-signal weights, and the 0.5 confidence cutoff are first guesses. Expect noisy or poorly-timed suggestions until these are calibrated to your usage pattern.
-- **Windows only.** Native modules (`uiohook-napi`, `screenshot-desktop`) are built for Windows. Mac/Linux are untested.
-- **OCR quality varies.** Tesseract performs inconsistently on low-contrast or small text. A poor OCR read means a weaker Tinker classification.
-- **uiohook-napi requires rebuilt native modules.** Run `npm run rebuild` after any Node/Electron version change. If hooks fail to start, the app logs a `degraded` warning and no signals are collected.
+- **Tinker endpoint is unverified.** Assumed URL and request format may differ from what Thinking Machines provides. Check endpoint and auth header if classification always returns null.
+- **No nudges without both keys.** No degraded fallback — if either key is missing/invalid the system is silent.
+- **Signal tuning is rough.** Friction threshold, signal weights, and 0.5 confidence cutoff are first guesses. Expect noisy timing until calibrated.
+- **Windows only.** `uiohook-napi` and `screenshot-desktop` are built for Windows. Mac/Linux untested.
+- **OCR quality varies.** Tesseract is inconsistent on low-contrast or small text, which weakens intent classification.
+- **Native modules must be rebuilt.** Run `npm run rebuild` after any Node/Electron version change. Failure emits a `degraded` warning and stops signal collection.
+- **v1 PredictiveDesktopLayer build is broken.** The `Host` project has an unresolved namespace error. VL-JEPA model loading is stubbed. Not functional.
 
 ---
 
 ## Project Structure
 
 ```
-src/
-  main/              # Electron main process
-    index.ts         # App entry, window management, IPC handlers, tray
-    pulse-engine.ts  # Sense → Weave → Intent → Nudge orchestrator
+PredictiveDesktopLayer/     # v1 — C#/.NET 8 action execution layer (broken build)
+vljepafolder/               # v1 — Python FastAPI VL-JEPA inference server (Cloud Run GPU)
+
+src/                        # v2 — current Electron app
+  main/
+    index.ts                # App entry, window management, IPC, tray
+    pulse-engine.ts         # Sense → Weave → Intent → Nudge orchestrator
     signal-collector.ts
     friction-scorer.ts
     capturer.ts
@@ -173,17 +211,17 @@ src/
     context-fabric.ts
     trust-manager.ts
     llm/
-      types.ts       # IntentProvider, ActionProvider, StreamChunk interfaces
-      tinker.ts      # TinkerIntentProvider (intent classification)
-      perplexity.ts  # PerplexityActionProvider (streaming response)
-      factory.ts     # buildProviders(settings)
-  renderer/          # React + Tailwind UI
-    main.tsx         # NudgeOverlay (toast) + SettingsWindow
-    tailwind.css     # Tailwind entry
+      types.ts              # IntentProvider, ActionProvider interfaces
+      tinker.ts             # TinkerIntentProvider
+      perplexity.ts         # PerplexityActionProvider
+      factory.ts            # buildProviders(settings)
+  renderer/
+    main.tsx                # NudgeOverlay + SettingsWindow (Tailwind)
+    tailwind.css
   shared/
-    types.ts         # All shared interfaces and IPC message types
+    types.ts                # All shared interfaces and IPC message types
 
-tests/               # tsx-based tests (no framework)
+tests/
   friction-scorer.test.ts
   trust-manager.test.ts
   context-fabric.test.ts
@@ -194,7 +232,7 @@ tests/               # tsx-based tests (no framework)
 
 ---
 
-## IPC Reference
+## IPC Reference (v2)
 
 | Direction | Channel | Payload |
 |---|---|---|

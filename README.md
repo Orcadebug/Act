@@ -1,5 +1,7 @@
 # Pulse — Friction-Aware Desktop Intelligence
 
+> **This is an early-stage demo.** Core signal collection, friction scoring, and the nudge pipeline work, but the system is not well-tuned and will produce noisy or poorly-timed suggestions in real use. Expect rough edges.
+
 Pulse is a Windows desktop app that watches your behavior in real time, detects when you're stuck, and delivers a proactive AI-powered suggestion in a floating overlay — without you having to ask.
 
 It monitors signals like typing hesitation, app-switching, dwell time, scroll velocity, clipboard cycling, and error dialogs. When those signals cross a threshold, it takes a screenshot, reads the screen with OCR, redacts PII, and asks the Perplexity API for the most useful next step given your context.
@@ -112,6 +114,16 @@ Two windows share a single Vite/React build with hash-based routing:
 | Logging | pino |
 | Active window | active-win |
 | Screenshots | screenshot-desktop |
+
+---
+
+## Requirements
+
+### Perplexity API (active research queries)
+Pulse uses the [Perplexity API](https://www.perplexity.ai/) (`sonar` model) to generate nudges with live web search grounding. You need an API key with access to the **sonar** model. Without it the app will silently skip nudge generation.
+
+### Fine-tuned model via Tinker
+The nudge pipeline is designed to work with a custom fine-tuned model accessed through **Tinker**. The fine-tuned model improves response quality for the friction/stuck-user context compared to a generic LLM. Without Tinker access the system falls back to the base Perplexity sonar model, which will produce more generic suggestions.
 
 ---
 

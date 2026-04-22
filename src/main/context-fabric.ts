@@ -104,8 +104,8 @@ export class ContextFabric {
       // Start decay timer — runs every 10 minutes
       this.decayTimer = setInterval(() => this.decayAll(), 600_000);
 
-      logger.info(`ContextFabric initialized at ${dbPath}`);
     } catch (e) {
+      console.error('CONTEXT ERROR:', e);
       logger.error('Failed to initialize ContextFabric:', e);
     }
   }
@@ -439,7 +439,7 @@ export class ContextFabric {
 
     try {
       this.db.prepare(`
-        INSERT INTO nudges (id, ts, tier, friction_score, trust_at_delivery, prompt, response, citations, context_summary, feedback)
+        INSERT OR IGNORE INTO nudges (id, ts, tier, friction_score, trust_at_delivery, prompt, response, citations, context_summary, feedback)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         id, nudge.ts, nudge.tier, nudge.frictionScore, nudge.trustAtDelivery,

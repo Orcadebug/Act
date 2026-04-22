@@ -5,7 +5,8 @@ import { OcrService } from './ocr';
 import { redactPII } from './redact';
 import { ContextFabric } from './context-fabric';
 import { TrustManager } from './trust-manager';
-import { NudgeResponder } from './perplexity';
+import { buildProviders } from './llm/factory';
+import { IntentProvider, ActionProvider } from './llm/types';
 import {
   PulseSettings,
   SignalSnapshot,
@@ -51,12 +52,16 @@ export class PulseEngine {
   private ocr: OcrService;
   private fabric: ContextFabric;
   private trust: TrustManager;
-  private responder: NudgeResponder;
+  private intent: IntentProvider;
+  private action: ActionProvider;
   private settings: PulseSettings;
+
+  private readonly INTENT_MIN_CONFIDENCE = 0.5;
   private onNudgeUpdate: (data: NudgeUpdateMessage) => void;
 
   // ── Rate limiting ──
   private lastNudgeTs = 0;
+  private lastNudgeContent = '';
   private isProcessing = false;
 
   // ── Snapshot counter for periodic context ingestion ──
@@ -76,7 +81,17 @@ export class PulseEngine {
     this.ocr = new OcrService();
     this.fabric = new ContextFabric(settings.edgeDecayRate, settings.edgePruneThreshold);
     this.trust = new TrustManager();
-    this.responder = new NudgeResponder(settings.perplexityApiKey, settings.perplexityModel);
+    const providers = buildProviders(settings);
+    this.intent = providers.intent;
+    this.action = providers.action;
+  }
+
+  public applySettings(next: PulseSettings) {
+    this.settings = next;
+    const providers = buildProviders(next);
+    this.intent = providers.intent;
+    this.action = providers.action;
+    logger.info('PulseEngine rebuilt providers with new settings');
   }
 
   public async start() {
@@ -196,41 +211,58 @@ export class PulseEngine {
       context.rawText = redactedScreen.substring(0, 1500);
       const contextPrompt = this.fabric.buildContextPrompt(context);
 
-      // 6. Determine nudge tier based on trust
-      const tier = this.trust.getNudgeTier();
-      const trustScore = this.trust.getScore();
-
-      // 7. Build user question
+      // 6. Intent Classification
       const topContributors = reading.contributors
         .slice(0, 3)
         .map(c => c.signal)
         .join(', ');
+
+      const intentInput = {
+        app: captureResult.app,
+        windowTitle: captureResult.title,
+        screenText: redactedScreen.substring(0, 1500),
+        clipboardText: redactedClipboard,
+        signalSummary: topContributors,
+        recentContext: contextPrompt
+      };
+
+      const intentResult = await this.intent.classifyIntent(intentInput);
+
+      if (!intentResult || intentResult.confidence < this.INTENT_MIN_CONFIDENCE) {
+        logger.info('Intent classification failed or confidence too low, suppressing nudge.');
+        this.isProcessing = false;
+        return;
+      }
+
+      // 7. Action Generation
+      const tier = intentResult.suggested_tier;
+      const trustScore = this.trust.getScore();
 
       const userQuestion = [
         `I'm using ${captureResult.app} (${captureResult.title}).`,
         redactedScreen ? `Screen content:\n---\n${redactedScreen.substring(0, 1500)}\n---` : '',
         redactedClipboard ? `Clipboard: ${redactedClipboard}` : '',
         `I seem to be experiencing friction (signals: ${topContributors}).`,
+        `Goal: ${intentResult.goal}`,
         `What's the most useful next step for me right now?`,
       ].filter(Boolean).join('\n');
 
-      // 8. Generate response
       const nudgeId = crypto.randomUUID();
 
-      const responseText = await this.responder.ask(
+      const responseText = await this.action.answer(
         userQuestion,
         tier,
         contextPrompt,
+        intentResult,
         (chunk) => {
+          if (chunk.text) this.lastNudgeContent = chunk.text;
           this.onNudgeUpdate({
-            type: chunk.done ? 'complete' : 'stream',
+            type: chunk.error ? 'error' : chunk.done ? 'complete' : 'stream',
             nudgeId,
             text: chunk.text,
-            citations: chunk.citations,
             done: chunk.done,
-            tier,
-            frictionScore: reading.smoothedScore,
-            trustScore,
+            citations: chunk.citations?.length ? chunk.citations : undefined,
+            error: chunk.error,
           });
         }
       );
@@ -276,6 +308,11 @@ export class PulseEngine {
 
   public getTrustProfile() {
     return this.trust.getProfile();
+  }
+
+  public getLastNudge() {
+    if (!this.lastNudgeContent) return null;
+    return { text: this.lastNudgeContent, ts: this.lastNudgeTs };
   }
 
   public getGraphStats() {

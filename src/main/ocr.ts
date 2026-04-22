@@ -30,10 +30,17 @@ export class OcrService {
     }
 
     try {
-      const { data: { text } } = await this.worker.recognize(imageBuffer);
-      return text;
-    } catch (e) {
-      logger.error('OCR recognition failed:', e);
+      const timeoutPromise = new Promise<string>((_, reject) =>
+        setTimeout(() => reject(new Error('OCR timeout')), 5000)
+      );
+      const ocrPromise = this.worker.recognize(imageBuffer).then(r => r.data.text);
+      return await Promise.race([ocrPromise, timeoutPromise]);
+    } catch (e: any) {
+      if (e?.message === 'OCR timeout') {
+        logger.warn('OCR timed out after 5s, continuing with empty text');
+      } else {
+        logger.error('OCR recognition failed:', e);
+      }
       return '';
     }
   }

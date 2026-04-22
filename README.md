@@ -1,9 +1,8 @@
-# ACT
-> **This is an early-stage demo.** Core signal collection, friction scoring, and the nudge pipeline work, but the system is not well-tuned and will produce noisy or poorly-timed suggestions in real use. Expect rough edges.
+# ACT — Friction-Aware Desktop Intelligence
 
-ACT is a Windows desktop app that watches your behavior in real time, detects when you're stuck, and delivers a proactive AI-powered suggestion in a floating overlay — without you having to ask.
+> **Early-stage demo. Expect rough edges and broken behavior.** The core signal collection, friction scoring, and two-stage LLM pipeline are implemented but not well-tuned. Nudges may fire at wrong times, the Tinker endpoint is assumed to be OpenAI-compatible (you'll need to confirm your actual endpoint), and the overall system has seen limited real-world testing.
 
-It monitors signals like typing hesitation, app-switching, dwell time, scroll velocity, clipboard cycling, and error dialogs. When those signals cross a threshold, it takes a screenshot, reads the screen with OCR, redacts PII, and asks the Perplexity API for the most useful next step given your context.
+ACT is a Windows desktop app that watches your behavior in real time, detects when you seem stuck, runs your screen context through a fine-tuned intent model, and delivers a proactive AI-powered suggestion in a floating translucent overlay — without you having to ask.
 
 ---
 
@@ -11,18 +10,18 @@ It monitors signals like typing hesitation, app-switching, dwell time, scroll ve
 
 ```
 SignalCollector (every 2s)
-        │  behavioral signals
+        │  behavioral signals (keyboard, mouse, scroll, clipboard, window)
         ▼
   FrictionScorer ──► FrictionReading (0.0 – 1.0)
         │
         ▼ friction above trust-adjusted threshold?
-  TrustManager ──► gates nudge + picks response depth
+  TrustManager ──► gates whether to proceed
         │
         ▼
     Capturer ──► screenshot + clipboard + active window
         │
         ▼
-   OcrService ──► screen text (Tesseract.js)
+   OcrService ──► screen text (Tesseract.js, 5s timeout)
         │
         ▼
    redactPII ──► strips emails, cards, long numbers
@@ -31,10 +30,15 @@ SignalCollector (every 2s)
   ContextFabric ──► entity-relationship graph (SQLite)
         │              apps, topics, workflows, edges
         ▼
-  NudgeResponder ──► Perplexity API (streaming, tiered depth)
+  TinkerIntentProvider ──► classifies intent via fine-tuned model
+        │  { goal, task_type, confidence, suggested_tier }
+        │
+        ├─ null / confidence < 0.5 → suppress (no nudge)
+        ▼
+  PerplexityActionProvider ──► streaming response (30s timeout)
         │
         ▼
-   Toast overlay ──► user sees nudge, clicks feedback
+   Translucent overlay ──► user sees streamed response, clicks ✕
         │
         ▼
   TrustManager ◄──── feedback updates trust score
@@ -47,7 +51,7 @@ SignalCollector (every 2s)
 
 ### Sense Layer
 
-**`SignalCollector`** hooks into global keyboard, mouse, and scroll events via `uiohook-napi`. Every 2 seconds it emits a `SignalSnapshot` containing:
+**`SignalCollector`** hooks into global keyboard, mouse, and scroll events via `uiohook-napi`. Every 2 seconds it emits a `SignalSnapshot`:
 
 | Signal | What it measures |
 |---|---|
@@ -58,44 +62,38 @@ SignalCollector (every 2s)
 | `clipboardCycles` | Repeated clipboard copy-paste cycles in 60s |
 | `errorDialogDetected` | Window title contains error/warning keywords |
 
-**`FrictionScorer`** fuses those signals into a single score (0.0 = total flow, 1.0 = completely stuck) using:
-- Configurable per-signal weights
-- Exponential moving average (α = 0.3) for smoothing
-- An adaptive 85th-percentile threshold that auto-calibrates to each user's normal behavior — a naturally frantic user gets a higher baseline so only truly unusual friction triggers nudges
+If `uiohook-napi` fails to load (common if native modules aren't rebuilt), the collector emits a `degraded` event and stops rather than emitting misleading zero-signal snapshots.
+
+**`FrictionScorer`** fuses signals into a score (0.0 = flow, 1.0 = stuck) using configurable per-signal weights, EMA smoothing (α = 0.3), and an adaptive 85th-percentile threshold.
 
 ### Weave Layer
 
-**`ContextFabric`** maintains a SQLite graph of the user's activity:
-- **Nodes**: apps, extracted topics, workflows, time blocks
-- **Edges**: `co_occurs`, `follows`, `related_to` — weighted by frequency
-- Edges strengthen (+0.2, capped at 10) on repeated co-occurrence and decay multiplicatively every 10 minutes. Edges below the prune threshold are deleted; orphaned nodes older than 7 days are garbage collected.
-- Provides `getContext(appName)` → context summary injected into the LLM prompt
-- Stores all nudges and their feedback for history and the dashboard
+**`ContextFabric`** maintains a SQLite graph of the user's activity — apps, topics, workflows, and time blocks as nodes; co-occurrence, sequence, and topic-relation as weighted edges. Edges decay every 10 minutes and are pruned below a minimum weight. Provides `buildContextPrompt()` for LLM injection and stores nudge history.
 
-Topic extraction from OCR text uses a lightweight frequency-based keyword extractor (no ML needed). An optional Python sidecar (`python-sidecar/main.py`) implements a more sophisticated TF-IDF approach via stdin/stdout JSON lines — not yet wired into the main pipeline.
+### Intent Layer
+
+**`TinkerIntentProvider`** (`src/main/llm/tinker.ts`) calls a fine-tuned intent classification model hosted via the Tinker platform. Given the current app, screen text, clipboard, and behavioral signals, it returns:
+
+```json
+{ "goal": "...", "task_type": "...", "confidence": 0.0–1.0, "suggested_tier": "hint|detail|deep_dive" }
+```
+
+**This is a hard gate.** If the Tinker key is missing, the endpoint is unreachable, confidence is below 0.5, or the response can't be parsed — the nudge is suppressed entirely. No Perplexity call is made.
+
+The endpoint is assumed to be OpenAI-compatible (`/v1/chat/completions` with JSON mode). You'll need to confirm the real endpoint URL and request schema with Thinking Machines.
 
 ### Nudge Layer
 
-**`TrustManager`** persists a trust score (0.0–1.0, starts at 0.5) across sessions via SQLite. It controls both the friction threshold required to trigger a nudge and the depth of the response:
+**`TrustManager`** persists an adaptive trust score (0.0–1.0, starts 0.5). Trust sets the friction threshold required to gate into the pipeline; the response tier now comes from Tinker's `suggested_tier`, not trust.
 
-| Trust | Friction threshold | Response depth |
-|---|---|---|
-| ≥ 0.8 | 0.40 (very proactive) | `deep_dive` |
-| ≥ 0.6 | 0.50 | `deep_dive` |
-| ≥ 0.3 | 0.65 | `detail` |
-| < 0.3 | 0.85 (only obvious friction) | `hint` |
+**`PerplexityActionProvider`** (`src/main/llm/perplexity.ts`) calls the Perplexity streaming API with a tier-matched system prompt and the classified goal injected. 30s timeout with `AbortController`. HTTP errors and timeouts surface as an error state in the overlay rather than silently hanging.
 
-Feedback deltas: engaged +0.05 · expanded +0.08 · dismissed −0.03 · ignored −0.01. Score regresses toward 0.5 at 0.5%/hour to prevent runaway states.
+### UI
 
-**`NudgeResponder`** calls the Perplexity streaming API with a tier-matched system prompt and the user's context graph summary injected. Streams tokens back to the toast UI in real time.
+Two windows share a single Vite/React/Tailwind build:
 
-### UI (Electron + React)
-
-Two windows share a single Vite/React build with hash-based routing:
-
-- **Toast overlay** (`#/toast`) — 380×420px, frameless, always-on-top, bottom-right corner. Shows the streaming nudge with a friction bar, tier label, and 4 feedback buttons (Helpful, More, Not now, ✕). Auto-hides after 30s if ignored.
-- **Dashboard** (`#/`) — trust profile, live friction score, graph stats (nodes/edges/nudges), recent nudge history.
-- **Settings** (`#/settings`) — all `PulseSettings` fields: signal interval, nudge cooldown, app allowlist, Perplexity API key + model, per-signal weights, edge decay parameters.
+- **Overlay** (`#/toast`) — translucent frosted-glass card, always-on-top, bottom-right corner. Shows only the streaming Perplexity response and optional citation hostnames. Single close button. Auto-hides after 30s if ignored.
+- **Settings** (`#/settings`) — configure Tinker key/model/endpoint, Perplexity key/model, overlay opacity, and theme. Advanced section for signal interval, nudge cooldown, and app allowlist.
 
 ---
 
@@ -104,12 +102,13 @@ Two windows share a single Vite/React build with hash-based routing:
 | Layer | Technology |
 |---|---|
 | Desktop shell | Electron 29 |
-| Frontend | React 18, TypeScript |
+| Frontend | React 18, TypeScript, Tailwind CSS |
 | Build | Vite + vite-plugin-electron |
 | Input hooks | uiohook-napi |
-| OCR | Tesseract.js |
+| OCR | Tesseract.js (5s timeout) |
 | Persistence | better-sqlite3 (WAL mode) |
-| AI | Perplexity API (sonar model, streaming) |
+| Intent model | Tinker (Thinking Machines) — fine-tuned, hosted |
+| Response model | Perplexity API (sonar, streaming, 30s timeout) |
 | Logging | pino |
 | Active window | active-win |
 | Screenshots | screenshot-desktop |
@@ -118,11 +117,17 @@ Two windows share a single Vite/React build with hash-based routing:
 
 ## Requirements
 
-### Perplexity API (active research queries)
-Pulse uses the [Perplexity API](https://www.perplexity.ai/) (`sonar` model) to generate nudges with live web search grounding. You need an API key with access to the **sonar** model. Without it the app will silently skip nudge generation.
+### Tinker API (intent classification — required)
+ACT requires a Tinker API key and a hosted fine-tuned model endpoint from [Thinking Machines](https://thinkingmachin.es/). Without it, zero nudges will fire. Configure the key, model name, and endpoint in Settings after launch.
 
-### Fine-tuned model via Tinker
-The nudge pipeline is designed to work with a custom fine-tuned model accessed through **Tinker**. The fine-tuned model improves response quality for the friction/stuck-user context compared to a generic LLM. Without Tinker access the system falls back to the base Perplexity sonar model, which will produce more generic suggestions.
+> **Note:** The default endpoint (`https://api.tinker.thinkingmachines.ai/v1/chat/completions`) is an assumption. Confirm the real endpoint with Thinking Machines before expecting this to work.
+
+### Perplexity API (response generation — required)
+ACT uses the [Perplexity API](https://www.perplexity.ai/) for streamed responses. You need an API key with access to the `sonar` model family. Set it in Settings or via the env var:
+
+```bash
+set PERPLEXITY_API_KEY=your_key_here
+```
 
 ---
 
@@ -133,14 +138,23 @@ npm install
 npm run rebuild        # rebuild native modules for current Electron ABI
 ```
 
-Set your Perplexity API key either as an environment variable or in the Settings window after launch:
-
 ```bash
 set PERPLEXITY_API_KEY=your_key_here
 npm run dev
 ```
 
-The app runs as a system tray icon. Double-click the tray icon to open the dashboard. `Ctrl+Shift+P` pauses/resumes monitoring.
+The app runs as a system tray icon. Double-click the tray icon or right-click → Open Settings to configure your API keys. `Ctrl+Shift+P` pauses/resumes monitoring.
+
+---
+
+## Known Limitations & Rough Edges
+
+- **Tinker endpoint is unverified.** The assumed endpoint URL and request format may not match what Thinking Machines actually provides. If classification always returns null, check the endpoint and auth header first.
+- **No nudges without both keys.** If either key is missing or invalid, the system is silent — there's no degraded fallback mode.
+- **Signal tuning is rough.** The friction threshold, per-signal weights, and the 0.5 confidence cutoff are first guesses. Expect noisy or poorly-timed suggestions until these are calibrated to your usage pattern.
+- **Windows only.** Native modules (`uiohook-napi`, `screenshot-desktop`) are built for Windows. Mac/Linux are untested.
+- **OCR quality varies.** Tesseract performs inconsistently on low-contrast or small text. A poor OCR read means a weaker Tinker classification.
+- **uiohook-napi requires rebuilt native modules.** Run `npm run rebuild` after any Node/Electron version change. If hooks fail to start, the app logs a `degraded` warning and no signals are collected.
 
 ---
 
@@ -149,8 +163,8 @@ The app runs as a system tray icon. Double-click the tray icon to open the dashb
 ```
 src/
   main/              # Electron main process
-    index.ts         # App entry, window management, IPC handlers
-    pulse-engine.ts  # SWN orchestrator
+    index.ts         # App entry, window management, IPC handlers, tray
+    pulse-engine.ts  # Sense → Weave → Intent → Nudge orchestrator
     signal-collector.ts
     friction-scorer.ts
     capturer.ts
@@ -158,19 +172,24 @@ src/
     redact.ts
     context-fabric.ts
     trust-manager.ts
-    perplexity.ts
-  renderer/          # React UI (toast, dashboard, settings)
-    main.tsx         # Entry + hash router
-    toast.tsx        # NudgeCard overlay
-    dashboard.tsx
-    settings.tsx
+    llm/
+      types.ts       # IntentProvider, ActionProvider, StreamChunk interfaces
+      tinker.ts      # TinkerIntentProvider (intent classification)
+      perplexity.ts  # PerplexityActionProvider (streaming response)
+      factory.ts     # buildProviders(settings)
+  renderer/          # React + Tailwind UI
+    main.tsx         # NudgeOverlay (toast) + SettingsWindow
+    tailwind.css     # Tailwind entry
   shared/
     types.ts         # All shared interfaces and IPC message types
 
-python-sidecar/
-  main.py            # Optional NLP topic extractor (stdin/stdout JSON lines, stdlib only)
-
-tests/               # tsx-based tests (no framework, mocks electron via require intercept)
+tests/               # tsx-based tests (no framework)
+  friction-scorer.test.ts
+  trust-manager.test.ts
+  context-fabric.test.ts
+  redact.test.ts
+  tinker-intent.test.ts
+  pipeline-two-stage.test.ts
 ```
 
 ---
@@ -179,12 +198,11 @@ tests/               # tsx-based tests (no framework, mocks electron via require
 
 | Direction | Channel | Payload |
 |---|---|---|
-| main → renderer | `nudge-update` | `NudgeUpdateMessage` (streamed chunks) |
-| main → renderer | `dashboard-data` | `{ trust, friction, graph }` |
+| main → renderer | `nudge-update` | `{ type, nudgeId, text, done, citations?, error? }` |
 | main → renderer | `settings-data` | `PulseSettings` |
-| renderer → main | `nudge-feedback` | `NudgeFeedbackMessage` |
-| renderer → main | `request-dashboard-data` | — |
+| renderer → main | `nudge-feedback` | `{ nudgeId, feedback }` |
 | renderer → main | `request-settings` | — |
+| renderer → main (invoke) | `save-settings` | `PulseSettings` → `{ ok: true }` |
 
 ---
 
@@ -195,4 +213,6 @@ npx tsx tests/friction-scorer.test.ts
 npx tsx tests/trust-manager.test.ts
 npx tsx tests/context-fabric.test.ts
 npx tsx tests/redact.test.ts
+npx tsx tests/tinker-intent.test.ts
+npx tsx tests/pipeline-two-stage.test.ts
 ```

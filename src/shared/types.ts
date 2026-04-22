@@ -103,6 +103,13 @@ export interface TrustProfile {
   lastUpdated: number;
 }
 
+export interface IntentResult {
+  goal: string;
+  task_type: string;
+  confidence: number;
+  suggested_tier: NudgeTier;
+}
+
 // ── Config ──
 
 export interface PulseSettings {
@@ -112,6 +119,16 @@ export interface PulseSettings {
   nudgeCooldownMs: number;
   /** App allowlist for capture (empty = all) */
   captureAllowlist: string[];
+  /** Tinker API key */
+  tinkerApiKey: string;
+  /** Tinker model name */
+  tinkerModel: string;
+  /** Tinker API endpoint */
+  tinkerEndpoint: string;
+  /** UI Theme for the settings window */
+  theme: 'system' | 'light' | 'dark';
+  /** Overlay background opacity (0.5–1.0) */
+  overlayOpacity: number;
   /** Perplexity API key */
   perplexityApiKey: string;
   /** Perplexity model name */
@@ -138,14 +155,12 @@ export interface SignalWeights {
 // ── IPC Messages ──
 
 export interface NudgeUpdateMessage {
-  type: 'stream' | 'complete';
+  type: 'stream' | 'complete' | 'error';
   nudgeId: string;
   text: string;
-  citations: string[];
   done: boolean;
-  tier: NudgeTier;
-  frictionScore: number;
-  trustScore: number;
+  citations?: string[];
+  error?: string;
 }
 
 export interface NudgeFeedbackMessage {

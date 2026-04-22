@@ -28,7 +28,7 @@ npx tsx tests/context-fabric.test.ts
 npx tsx tests/redact.test.ts
 ```
 
-## Architecture: Sense → Weave → Nudge (SWN)
+## Architecture: Sense → Weave → Intent → Nudge
 
 The entire system is orchestrated by `PulseEngine` (`src/main/pulse-engine.ts`), which wires together three layers:
 
@@ -42,29 +42,35 @@ The entire system is orchestrated by `PulseEngine` (`src/main/pulse-engine.ts`),
 - **`OcrService`** (`src/main/ocr.ts`) — runs Tesseract.js on the screenshot to extract screen text.
 - **`redactPII`** (`src/main/redact.ts`) — strips emails, credit cards, and long numeric strings before sending to the API.
 
+### Intent Layer (NEW)
+- **`TinkerIntentProvider`** (`src/main/llm/tinker.ts`) — calls the Tinker (Thinking Machines) fine-tuned model to classify user intent. Returns `{ goal, task_type, confidence, suggested_tier }`. Hard gate: if missing/failing, nudge is suppressed entirely.
+- **`src/main/llm/factory.ts`** — `buildProviders(settings)` wires both providers from settings. Called in constructor and on `applySettings`.
+
 ### Nudge Layer
-- **`TrustManager`** (`src/main/trust-manager.ts`) — SQLite-backed adaptive trust score (0.0–1.0, starts at 0.5). User feedback adjusts the score: engaged +0.05, expanded +0.08, dismissed −0.03, ignored −0.01. Trust determines two things: (1) the friction threshold required to trigger a nudge, and (2) the response tier (hint / detail / deep_dive).
-- **`NudgeResponder`** (`src/main/perplexity.ts`) — calls the Perplexity streaming API with a tier-appropriate system prompt and injected context. Streams chunks back to the UI via IPC.
+- **`TrustManager`** (`src/main/trust-manager.ts`) — SQLite-backed adaptive trust score (0.0–1.0, starts at 0.5). Still used for the friction gate threshold; `suggested_tier` now comes from Tinker intent, not trust.
+- **`PerplexityActionProvider`** (`src/main/llm/perplexity.ts`) — calls the Perplexity streaming API (30s timeout, AbortController). Streams chunks back to the UI via IPC. Propagates HTTP errors as `error` events.
 
 ### Renderer (React)
-All renderer views share a single Vite/React entrypoint (`src/renderer/main.tsx`) using hash-based routing (`#/`, `#/settings`).
+Single Vite/React entrypoint (`src/renderer/main.tsx`) with Tailwind CSS. Hash-based routing:
 
-- **`NudgeCard`** (`src/renderer/toast.tsx`) — frameless, always-on-top overlay (bottom-right corner). Receives `nudge-update` IPC messages and streams text. 4 feedback buttons map to the 4 `NudgeFeedbackType` values.
-- **`Dashboard`** (`src/renderer/dashboard.tsx`) — shows trust profile, current friction, graph stats, recent nudges.
-- **`Settings`** (`src/renderer/settings.tsx`) — form for all `PulseSettings` fields, saved via `save-settings` IPC.
+- **`NudgeOverlay`** (`#/toast`) — Cluely-style translucent frosted-glass card, always-on-top, bottom-right. Shows ONLY the streaming Perplexity response + optional citation hostnames. Single close button. Auto-hides after 30s.
+- **`SettingsWindow`** (`#/settings` or `#/`) — Tailwind-styled settings form: Tinker key/model/endpoint, Perplexity key/model, overlay opacity slider, theme toggle, advanced collapsible.
 
 ### IPC Contract
-Main process sends: `nudge-update`, `dashboard-data`, `settings-data`
-Renderer sends: `nudge-feedback`, `request-dashboard-data`, `request-settings`
+Main process sends: `nudge-update` (`{ type, nudgeId, text, done, citations?, error? }`), `settings-data`
+Renderer sends: `nudge-feedback`, `request-settings`
+Renderer invokes (handle): `save-settings` → returns `{ ok: true }`
 
 All shared types (including IPC message shapes) live in `src/shared/types.ts`.
 
 ## Key Configuration
 
-- **`captureAllowlist`** in `defaultSettings` (`src/main/index.ts`) — array of app name substrings that are allowed to trigger nudge capture. Empty = allow all.
-- **`PERPLEXITY_API_KEY`** env var or `perplexityApiKey` in settings — required for nudge generation.
+- **`tinkerApiKey`** / **`tinkerEndpoint`** — required; no nudges fire without a valid Tinker key.
+- **`perplexityApiKey`** / **`PERPLEXITY_API_KEY`** env var — required for response generation.
+- **`captureAllowlist`** — app name substrings allowed to trigger capture. Empty = allow all.
 - **`nudgeCooldownMs`** — minimum gap between nudges (default 30s).
-- **`INGEST_EVERY`** constant in `PulseEngine` — context graph is updated every 5 snapshots (every 10s) rather than every 2s cycle.
+- **`overlayOpacity`** — overlay background opacity 0.5–1.0 (default 0.92).
+- **`INGEST_EVERY`** constant in `PulseEngine` — context graph updated every 5 snapshots.
 
 ## Native Modules
 

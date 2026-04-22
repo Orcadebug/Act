@@ -4,14 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Pulse</title>
-    <style>
-      body {
-        margin: 0;
-        padding: 0;
-        background: transparent;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      }
-    </style>
+    <!-- Apply saved theme before React mounts to prevent flash -->
+    <script>
+      try {
+        const t = localStorage.getItem('pulse-theme');
+        if (t && t !== 'system') document.documentElement.dataset.theme = t;
+        else if (!t || t === 'system') {
+          if (window.matchMedia('(prefers-color-scheme: dark)').matches)
+            document.documentElement.dataset.theme = 'dark';
+        }
+      } catch {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -1,19 +1,10 @@
 import { request } from 'undici';
 import pino from 'pino';
-import { NudgeTier, ContextSummary } from '../shared/types';
+import { NudgeTier, IntentResult } from '../../shared/types';
+import { ActionProvider, StreamChunk } from './types';
 
-const logger = pino({ name: 'NudgeResponder' });
+const logger = pino({ name: 'PerplexityActionProvider' });
 
-export interface StreamChunk {
-  text: string;
-  citations: string[];
-  done: boolean;
-}
-
-/**
- * System prompts tiered by trust level.
- * Lower trust = more concise; higher trust = more detailed.
- */
 const TIER_PROMPTS: Record<NudgeTier, string> = {
   hint:
     `You help a desktop user. Give ONE concise sentence — a quick hint or nudge pointing them in the right direction. Do not explain further unless asked.`,
@@ -23,14 +14,7 @@ const TIER_PROMPTS: Record<NudgeTier, string> = {
     `You help a desktop user. Give a thorough answer with step-by-step guidance and relevant resources. Be specific to their context and reference their patterns when helpful.`,
 };
 
-/**
- * NudgeResponder — Trust-tiered response generation.
- *
- * Unlike a fixed-output responder, this adapts response depth
- * based on the user's trust level and injects context graph
- * information into the system prompt for personalization.
- */
-export class NudgeResponder {
+export class PerplexityActionProvider implements ActionProvider {
   private apiKey: string;
   private model: string;
 
@@ -39,25 +23,33 @@ export class NudgeResponder {
     this.model = model;
   }
 
-  /**
-   * Generate a nudge response with context injection and trust-tiered depth.
-   */
-  public async ask(
+  public isConfigured(): boolean {
+    return !!this.apiKey;
+  }
+
+  public async answer(
     userContext: string,
     tier: NudgeTier,
     contextSummary: string,
+    intent: IntentResult,
     onChunk: (chunk: StreamChunk) => void
   ): Promise<string> {
     if (!this.apiKey) {
       logger.error('Perplexity API key missing');
+      onChunk({ text: '', citations: [], done: true, error: 'Perplexity API key not configured.' });
       return '';
     }
 
-    // Build system prompt from tier + context
     let systemPrompt = TIER_PROMPTS[tier];
+    if (intent && intent.goal) {
+      systemPrompt += `\n\nUser Goal: ${intent.goal}`;
+    }
     if (contextSummary) {
       systemPrompt += `\n\nUser context from their activity history:\n${contextSummary}`;
     }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
 
     try {
       const response = await request('https://api.perplexity.ai/chat/completions', {
@@ -75,10 +67,14 @@ export class NudgeResponder {
             { role: 'user', content: userContext },
           ],
         }),
+        signal: controller.signal,
       });
 
       if (response.statusCode !== 200) {
-        logger.error(`Perplexity API error: ${response.statusCode}`);
+        const errBody = await response.body.text().catch(() => '');
+        const msg = `Perplexity error ${response.statusCode}${errBody ? ': ' + errBody.slice(0, 120) : ''}`;
+        logger.error(msg);
+        onChunk({ text: '', citations: [], done: true, error: msg });
         return '';
       }
 
@@ -89,7 +85,7 @@ export class NudgeResponder {
         const lines = chunk.toString().split('\n').filter((line: string) => line.trim() !== '');
         for (const line of lines) {
           if (line.startsWith('data: ')) {
-            const dataStr = line.replace('data: ', '');
+            const dataStr = line.slice(6);
             if (dataStr === '[DONE]') {
               onChunk({ text: fullText, citations, done: true });
               break;
@@ -104,16 +100,20 @@ export class NudgeResponder {
               }
               onChunk({ text: fullText, citations, done: false });
             } catch {
-              // Ignore parse errors on incomplete chunks
+              // Ignore parse errors on incomplete SSE chunks
             }
           }
         }
       }
 
       return fullText;
-    } catch (e) {
-      logger.error('Error calling Perplexity:', e);
+    } catch (e: any) {
+      const msg = e?.name === 'AbortError' ? 'Request timed out after 30s.' : `Perplexity error: ${e?.message ?? e}`;
+      logger.error(msg);
+      onChunk({ text: '', citations: [], done: true, error: msg });
       return '';
+    } finally {
+      clearTimeout(timeout);
     }
   }
 }

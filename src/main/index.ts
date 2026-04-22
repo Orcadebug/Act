@@ -16,7 +16,12 @@ const defaultSettings: PulseSettings = {
   signalIntervalMs: 2000,
   nudgeCooldownMs: 30000,
   captureAllowlist: ['Code', 'Chrome', 'Notepad', 'Firefox', 'Edge'],
-  perplexityApiKey: process.env.PERPLEXITY_API_KEY || 'test_key',
+  tinkerApiKey: '',
+  tinkerModel: 'tinker-default',
+  tinkerEndpoint: 'https://api.tinker.thinkingmachines.ai/v1/chat/completions',
+  theme: 'system',
+  overlayOpacity: 0.92,
+  perplexityApiKey: process.env.PERPLEXITY_API_KEY || '',
   perplexityModel: 'sonar',
   screenshotRetention: false,
   signalWeights: {
@@ -37,14 +42,16 @@ let currentSettings = { ...defaultSettings };
 
 function createToastWindow() {
   toastWindow = new BrowserWindow({
-    width: 380,
-    height: 420,
+    width: 420,
+    height: 460,
     show: false,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
     skipTaskbar: true,
     resizable: false,
+    hasShadow: false,
+    backgroundColor: '#00000000',
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -52,63 +59,27 @@ function createToastWindow() {
   });
 
   const { screen } = require('electron');
-  const primaryDisplay = screen.getPrimaryDisplay();
-  const { width, height } = primaryDisplay.workAreaSize;
-  toastWindow.setBounds({
-    x: width - 400,
-    y: height - 440,
-    width: 380,
-    height: 420,
-  });
+  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+  toastWindow.setBounds({ x: width - 440, y: height - 480, width: 420, height: 460 });
+  toastWindow.setIgnoreMouseEvents(false);
 
   loadPage(toastWindow, 'toast');
 }
 
-// ── Dashboard Window ──
-
-function createDashboardWindow() {
-  if (dashboardWindow && !dashboardWindow.isDestroyed()) {
-    dashboardWindow.focus();
-    return;
-  }
-
-  dashboardWindow = new BrowserWindow({
-    width: 680,
-    height: 700,
-    minWidth: 500,
-    minHeight: 500,
-    frame: true,
-    title: 'Pulse — Dashboard',
-    backgroundColor: '#0f0f13',
-    webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
-    },
-  });
-
-  loadPage(dashboardWindow, '');
-
-  dashboardWindow.on('closed', () => {
-    dashboardWindow = null;
-  });
-}
-
 function createSettingsWindow() {
   if (dashboardWindow && !dashboardWindow.isDestroyed()) {
-    // Load settings into existing dashboard window
-    loadPage(dashboardWindow, 'settings');
     dashboardWindow.focus();
     return;
   }
 
   dashboardWindow = new BrowserWindow({
-    width: 550,
-    height: 650,
-    minWidth: 450,
-    minHeight: 400,
+    width: 520,
+    height: 660,
+    minWidth: 440,
+    minHeight: 500,
     frame: true,
     title: 'Pulse — Settings',
-    backgroundColor: '#0f0f13',
+    backgroundColor: '#0a0a0a',
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -120,6 +91,10 @@ function createSettingsWindow() {
   dashboardWindow.on('closed', () => {
     dashboardWindow = null;
   });
+}
+
+function createDashboardWindow() {
+  createSettingsWindow();
 }
 
 function loadPage(win: BrowserWindow, route: string) {
@@ -147,7 +122,6 @@ function showNudge(data: NudgeUpdateMessage) {
 
 app.whenReady().then(async () => {
   createToastWindow();
-  createDashboardWindow(); // Show dashboard on launch
 
   // Resolve tray icon
   const { nativeImage } = require('electron');
@@ -168,55 +142,25 @@ app.whenReady().then(async () => {
 
   tray = new Tray(trayIcon);
 
-  const buildMenu = () => {
-    const trustScore = engine ? engine.getTrustScore() : 0.5;
-    const friction = engine ? engine.getCurrentFriction() : 0;
-    const stats = engine ? engine.getGraphStats() : { nodes: 0, edges: 0, nudges: 0 };
-
-    return Menu.buildFromTemplate([
-      {
-        label: '📊 Dashboard',
-        click: () => createDashboardWindow(),
+  const buildMenu = () => Menu.buildFromTemplate([
+    { label: 'Open Settings', click: () => createSettingsWindow() },
+    { type: 'separator' },
+    {
+      label: isPaused ? 'Resume' : 'Pause',
+      click: () => {
+        isPaused = !isPaused;
+        if (engine) isPaused ? engine.pause() : engine.resume();
+        tray?.setContextMenu(buildMenu());
       },
-      {
-        label: '⚙ Settings',
-        click: () => createSettingsWindow(),
-      },
-      { type: 'separator' },
-      {
-        label: isPaused ? '▶ Resume' : '⏸ Pause',
-        click: () => {
-          isPaused = !isPaused;
-          if (engine) {
-            isPaused ? engine.pause() : engine.resume();
-          }
-          tray?.setContextMenu(buildMenu());
-        },
-      },
-      { type: 'separator' },
-      {
-        label: `Trust: ${(trustScore * 100).toFixed(0)}%  ·  Friction: ${(friction * 100).toFixed(0)}%`,
-        enabled: false,
-      },
-      {
-        label: `Graph: ${stats.nodes}N / ${stats.edges}E  ·  ${stats.nudges} nudges`,
-        enabled: false,
-      },
-      { type: 'separator' },
-      { label: 'Quit Pulse', click: () => app.quit() },
-    ]);
-  };
+    },
+    { type: 'separator' },
+    { label: 'Quit Pulse', click: () => app.quit() },
+  ]);
 
   tray.setToolTip('Pulse — Friction-Aware Desktop Intelligence');
   tray.setContextMenu(buildMenu());
 
-  // Double-click tray → open dashboard
-  tray.on('double-click', () => createDashboardWindow());
-
-  // Refresh tray stats periodically
-  setInterval(() => {
-    if (tray) tray.setContextMenu(buildMenu());
-  }, 15_000);
+  tray.on('double-click', () => createSettingsWindow());
 
   // Global shortcut: Ctrl+Shift+P to toggle pause
   try {
@@ -241,7 +185,7 @@ app.on('window-all-closed', () => {
   // Don't quit — we're a tray app
 });
 
-app.on('will-quit', () => {
+app.on('before-quit', () => {
   globalShortcut.unregisterAll();
   if (engine) engine.stop();
 });
@@ -266,6 +210,7 @@ ipcMain.on('request-dashboard-data', (event) => {
     trust: engine.getTrustProfile(),
     friction: engine.getCurrentFriction(),
     graph: engine.getGraphStats(),
+    lastNudge: engine.getLastNudge(),
   });
 });
 
@@ -274,8 +219,11 @@ ipcMain.on('request-settings', (event) => {
   event.sender.send('settings-data', currentSettings);
 });
 
-ipcMain.on('save-settings', (_event, newSettings: PulseSettings) => {
-  currentSettings = { ...newSettings };
+ipcMain.handle('save-settings', (_event, newSettings: PulseSettings) => {
+  currentSettings = { ...currentSettings, ...newSettings };
   logger.info('Settings updated');
-  // TODO: apply settings to running engine without restart
+  if (engine) {
+    engine.applySettings(currentSettings);
+  }
+  return { ok: true };
 });

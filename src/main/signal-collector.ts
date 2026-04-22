@@ -25,6 +25,7 @@ export class SignalCollector extends EventEmitter {
   private intervalMs: number;
   private timer: NodeJS.Timeout | null = null;
   private isPaused = false;
+  private hooksActive = false;
 
   // ── Keystroke tracking ──
   private keystrokeTimestamps: number[] = [];
@@ -87,9 +88,13 @@ export class SignalCollector extends EventEmitter {
   public start() {
     try {
       uIOhook.start();
+      this.hooksActive = true;
       logger.info('uIOhook input hooks started');
     } catch (e) {
-      logger.error('Failed to start uIOhook (native module might not be built):', e);
+      logger.error('Failed to start uIOhook — signal collection degraded (no keyboard/mouse data):', e);
+      this.emit('degraded', e);
+      // Don't start the snapshot loop — emit nothing rather than emit misleading zeros
+      return;
     }
 
     this.timer = setInterval(() => this.collectSnapshot(), this.intervalMs);

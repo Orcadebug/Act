@@ -1,0 +1,62 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{38312F93-1D9C-48C4-B2FC-35F9AAC2333F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PredictiveDesktopLayer.Domain", "src\PredictiveDesktopLayer.Domain\PredictiveDesktopLayer.Domain.csproj", "{3B7987FB-100F-413F-8196-71573762FCE8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PredictiveDesktopLayer.Application", "src\PredictiveDesktopLayer.Application\PredictiveDesktopLayer.Application.csproj", "{5230E1F6-1F01-4E5E-8AC6-4532CBE88D93}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PredictiveDesktopLayer.Infrastructure", "src\PredictiveDesktopLayer.Infrastructure\PredictiveDesktopLayer.Infrastructure.csproj", "{7CE59897-B30A-43D2-91DB-A950B0742FB0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PredictiveDesktopLayer.UI", "src\PredictiveDesktopLayer.UI\PredictiveDesktopLayer.UI.csproj", "{09406690-0540-4139-81F8-0C3E0FF3E755}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PredictiveDesktopLayer.Host", "src\PredictiveDesktopLayer.Host\PredictiveDesktopLayer.Host.csproj", "{2ADED537-5883-4A5E-9A28-34E1384348C2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PredictiveDesktopLayer.Tests", "src\PredictiveDesktopLayer.Tests\PredictiveDesktopLayer.Tests.csproj", "{6AC935E9-59B1-4056-BC65-3080E1E3DC8B}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{3B7987FB-100F-413F-8196-71573762FCE8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3B7987FB-100F-413F-8196-71573762FCE8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3B7987FB-100F-413F-8196-71573762FCE8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3B7987FB-100F-413F-8196-71573762FCE8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5230E1F6-1F01-4E5E-8AC6-4532CBE88D93}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5230E1F6-1F01-4E5E-8AC6-4532CBE88D93}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5230E1F6-1F01-4E5E-8AC6-4532CBE88D93}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5230E1F6-1F01-4E5E-8AC6-4532CBE88D93}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7CE59897-B30A-43D2-91DB-A950B0742FB0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7CE59897-B30A-43D2-91DB-A950B0742FB0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7CE59897-B30A-43D2-91DB-A950B0742FB0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7CE59897-B30A-43D2-91DB-A950B0742FB0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{09406690-0540-4139-81F8-0C3E0FF3E755}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{09406690-0540-4139-81F8-0C3E0FF3E755}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{09406690-0540-4139-81F8-0C3E0FF3E755}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{09406690-0540-4139-81F8-0C3E0FF3E755}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2ADED537-5883-4A5E-9A28-34E1384348C2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2ADED537-5883-4A5E-9A28-34E1384348C2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2ADED537-5883-4A5E-9A28-34E1384348C2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2ADED537-5883-4A5E-9A28-34E1384348C2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6AC935E9-59B1-4056-BC65-3080E1E3DC8B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6AC935E9-59B1-4056-BC65-3080E1E3DC8B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6AC935E9-59B1-4056-BC65-3080E1E3DC8B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6AC935E9-59B1-4056-BC65-3080E1E3DC8B}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{3B7987FB-100F-413F-8196-71573762FCE8} = {38312F93-1D9C-48C4-B2FC-35F9AAC2333F}
+		{5230E1F6-1F01-4E5E-8AC6-4532CBE88D93} = {38312F93-1D9C-48C4-B2FC-35F9AAC2333F}
+		{7CE59897-B30A-43D2-91DB-A950B0742FB0} = {38312F93-1D9C-48C4-B2FC-35F9AAC2333F}
+		{09406690-0540-4139-81F8-0C3E0FF3E755} = {38312F93-1D9C-48C4-B2FC-35F9AAC2333F}
+		{2ADED537-5883-4A5E-9A28-34E1384348C2} = {38312F93-1D9C-48C4-B2FC-35F9AAC2333F}
+		{6AC935E9-59B1-4056-BC65-3080E1E3DC8B} = {38312F93-1D9C-48C4-B2FC-35F9AAC2333F}
+	EndGlobalSection
+EndGlobal

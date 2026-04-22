@@ -1,0 +1,25 @@
+# VL-JEPA Server Dependencies
+# Optimized for Google Cloud Run with GPU (NVIDIA L4, CUDA 12.1)
+
+# Web Framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+
+# Data Validation
+pydantic==2.5.3
+
+# PyTorch with CUDA 12.1 (Cloud Run GPU uses CUDA 12.x)
+--extra-index-url https://download.pytorch.org/whl/cu121
+torch==2.2.0
+torchvision==0.17.0
+
+# Image Processing
+pillow==10.2.0
+numpy==1.26.3
+
+# Utilities
+python-dotenv==1.0.0
+
+# Cloud Run optimizations
+gunicorn==21.2.0

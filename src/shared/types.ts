@@ -72,6 +72,29 @@ export interface ContextSummary {
   rawText: string;
 }
 
+// ── Memory Tiers ──
+
+/** Tier 1 — active session (resets after 20min idle or app restart) */
+export interface SessionMemory {
+  id: string;
+  startTs: number;
+  endTs: number | null;
+  apps: string[];
+  topics: string[];
+  lastGoal: string;
+  nudgeCount: number;
+}
+
+/** Tier 3 — inferred user profile (persists indefinitely, updated from feedback) */
+export interface UserProfile {
+  preferredTier: NudgeTier;
+  activeHours: number[];
+  domainKeywords: string[];
+  nudgeAcceptanceRate: number;
+  feedbackRatios: { engaged: number; expanded: number; dismissed: number; ignored: number };
+  lastUpdated: number;
+}
+
 // ── Nudge Layer ──
 
 export type NudgeTier = 'hint' | 'detail' | 'deep_dive';

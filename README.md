@@ -102,9 +102,18 @@ If `uiohook-napi` fails to load (common if native modules aren't rebuilt), the c
 
 **`FrictionScorer`** fuses signals into a score (0.0 = flow, 1.0 = stuck) using configurable per-signal weights, EMA smoothing (α = 0.3), and an adaptive 85th-percentile threshold.
 
-### Weave Layer
+### Weave Layer — 3-Tier Memory
 
-**`ContextFabric`** maintains a SQLite graph of the user's activity — apps, topics, workflows, and time blocks as nodes; co-occurrence, sequence, and topic-relation as weighted edges. Edges decay every 10 minutes and are pruned below a minimum weight. Provides `buildContextPrompt()` for LLM injection and stores nudge history.
+**`ContextFabric`** (`src/main/context-fabric.ts`) manages memory across three distinct tiers, all backed by SQLite:
+
+#### Tier 1 — Session Memory (in-memory + DB, resets after 20min idle)
+Tracks the current working context: which apps were active, what topics appeared in screen text, the last Tinker-classified goal, and how many nudges fired this session. A new session starts on app launch or after 20 minutes of no signal activity. Session state is persisted to a `sessions` table on rotation so history isn't lost.
+
+#### Tier 2 — Long-Term Graph (persists indefinitely, edge-weighted)
+An entity-relationship graph of apps, topics, and workflows as nodes with weighted edges (`co_occurs`, `follows`, `related_to`). Edges strengthen on repeated co-occurrence and decay every 10 minutes. **Anchor nodes** (apps or topics accessed ≥ 30 times) are protected from decay and pruning — they represent stable, domain-defining patterns. `buildContextPrompt()` surfaces core anchored apps, stable workflows, and domain topics for LLM injection.
+
+#### Tier 3 — User Profile (persists indefinitely, updated from feedback)
+Inferred behavioral profile updated every 5th nudge feedback event: preferred response depth (hint / detail / deep_dive based on which tier gets the highest engagement), active hours, domain keywords, and nudge acceptance rate. Read by `buildContextPrompt()` to personalize the context block sent to Tinker and Perplexity.
 
 ### Intent Layer
 

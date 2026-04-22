@@ -96,6 +96,7 @@ export class PulseEngine {
 
   public async start() {
     await this.ocr.init();
+    this.fabric.startSession();
 
     // Wire up signal collection → friction scoring → nudge pipeline
     this.collector.on('snapshot', (snapshot: SignalSnapshot) => {
@@ -109,6 +110,7 @@ export class PulseEngine {
   public stop() {
     this.collector.stop();
     this.ocr.terminate();
+    this.fabric.endSession();
     this.fabric.close();
     this.trust.close();
     logger.info('PulseEngine stopped');
@@ -234,6 +236,9 @@ export class PulseEngine {
         return;
       }
 
+      // Store classified goal in session memory
+      this.fabric.setSessionGoal(intentResult.goal);
+
       // 7. Action Generation
       const tier = intentResult.suggested_tier;
       const trustScore = this.trust.getScore();
@@ -266,6 +271,9 @@ export class PulseEngine {
           });
         }
       );
+
+      // Record nudge in session memory
+      this.fabric.incrementSessionNudgeCount();
 
       // 9. Save nudge to context fabric
       this.fabric.saveNudge({

@@ -1,0 +1,38 @@
+{
+  "name": "proactive-ai",
+  "version": "1.0.0",
+  "main": "dist-electron/index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && electron-builder",
+    "rebuild": "electron-rebuild -f -w uiohook-napi,better-sqlite3,keytar"
+  },
+  "dependencies": {
+    "active-win": "^3.0.0",
+    "better-sqlite3": "^9.4.3",
+    "keytar": "^7.9.0",
+    "pino": "^8.19.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "screenshot-desktop": "^1.15.0",
+    "tesseract.js": "^5.0.4",
+    "uiohook-napi": "^1.5.2",
+    "undici": "^6.8.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^3.2.13",
+    "@types/better-sqlite3": "^7.6.9",
+    "@types/node": "^20.11.24",
+    "@types/react": "^18.2.61",
+    "@types/react-dom": "^18.2.19",
+    "@vitejs/plugin-react": "^4.2.1",
+    "electron": "^29.1.0",
+    "electron-builder": "^24.13.3",
+    "tsx": "^4.21.0",
+    "typescript": "^5.3.3",
+    "vite": "^5.1.4",
+    "vite-plugin-electron": "^0.28.2",
+    "vite-plugin-electron-renderer": "^0.14.5"
+  }
+}

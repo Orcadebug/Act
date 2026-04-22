@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pulse — Nudge Demo</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      min-height: 100vh;
+      background: #0f0f13;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Desktop background */
+    .desktop-bg {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      background:
+        radial-gradient(ellipse at 20% 50%, rgba(167, 139, 250, 0.08) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 20%, rgba(126, 184, 218, 0.06) 0%, transparent 50%),
+        radial-gradient(ellipse at 60% 80%, rgba(240, 160, 90, 0.04) 0%, transparent 50%);
+    }
+
+    /* Taskbar */
+    .taskbar {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      height: 48px;
+      background: rgba(15, 15, 19, 0.95);
+      backdrop-filter: blur(20px);
+      border-top: 1px solid rgba(255,255,255,0.04);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      z-index: 5;
+    }
+    .taskbar-icon {
+      width: 36px; height: 36px;
+      border-radius: 6px;
+      background: rgba(255,255,255,0.04);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+      transition: background 0.2s;
+      cursor: pointer;
+    }
+    .taskbar-icon:hover { background: rgba(255,255,255,0.08); }
+    .taskbar-icon.active {
+      background: rgba(167, 139, 250, 0.12);
+      border-bottom: 2px solid #a78bfa;
+    }
+
+    /* Fake editor */
+    .fake-editor {
+      position: fixed;
+      top: 30px; left: 40px; right: 420px; bottom: 68px;
+      background: #1e1e2e;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.06);
+      overflow: hidden;
+      z-index: 1;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.4);
+    }
+    .editor-titlebar {
+      height: 36px;
+      background: #181820;
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      gap: 8px;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .editor-dot { width: 12px; height: 12px; border-radius: 50%; }
+    .editor-dot.r { background: #ff5f57; }
+    .editor-dot.y { background: #ffbd2e; }
+    .editor-dot.g { background: #28c840; }
+    .editor-tab {
+      margin-left: 16px;
+      font-size: 12px;
+      color: rgba(255,255,255,0.4);
+      padding: 4px 12px;
+      background: rgba(255,255,255,0.03);
+      border-radius: 4px;
+    }
+    .editor-content {
+      padding: 20px;
+      font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+      font-size: 13px;
+      line-height: 1.7;
+      color: #cdd6f4;
+    }
+    .kw { color: #cba6f7; }
+    .fn { color: #89b4fa; }
+    .str { color: #a6e3a1; }
+    .cm { color: #585b70; font-style: italic; }
+    .num { color: #fab387; }
+    .ln { color: #45475a; user-select: none; display: inline-block; width: 30px; text-align: right; margin-right: 16px; }
+    .err { text-decoration: wavy underline; text-decoration-color: #f38ba8; }
+
+    /* Nudge card */
+    .nudge-container {
+      position: fixed;
+      right: 20px;
+      bottom: 68px;
+      width: 380px;
+      z-index: 100;
+      animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes slideUp {
+      from { transform: translateY(30px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    .nudge {
+      border-radius: 14px;
+      border: 1px solid rgba(167, 139, 250, 0.2);
+      box-shadow:
+        0 0 0 1px rgba(0,0,0,0.3),
+        0 8px 32px rgba(0,0,0,0.5),
+        inset 0 0 40px rgba(167, 139, 250, 0.06);
+      overflow: hidden;
+      backdrop-filter: blur(24px);
+    }
+
+    .nudge-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 16px 10px 16px;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .nudge-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      animation: pulse-dot 1.5s ease infinite;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+    .nudge-tier {
+      font-weight: 600;
+      font-size: 13px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+    .nudge-close {
+      margin-left: auto;
+      background: transparent;
+      border: none;
+      color: #52525b;
+      font-size: 16px;
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .nudge-close:hover { color: #a1a1aa; }
+
+    /* Friction bar */
+    .friction-bar-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 0 16px;
+      margin: 10px 0;
+    }
+    .friction-label { font-size: 10px; color: #52525b; min-width: 50px; }
+    .friction-track {
+      flex: 1; height: 3px;
+      background: #27272a; border-radius: 2px; overflow: hidden;
+    }
+    .friction-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #4ade80, #facc15, #ef4444);
+      border-radius: 2px;
+      transition: width 0.5s ease;
+    }
+    .friction-pct { font-size: 10px; color: #52525b; min-width: 30px; text-align: right; }
+
+    .nudge-body {
+      padding: 0 16px 14px;
+    }
+    .nudge-text {
+      font-size: 13px;
+      line-height: 1.55;
+      color: #d4d4d8;
+    }
+    .nudge-text code {
+      background: rgba(137, 180, 250, 0.1);
+      color: #89b4fa;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-family: 'Cascadia Code', 'Fira Code', monospace;
+      font-size: 12px;
+    }
+    .nudge-text .highlight {
+      color: #a78bfa;
+      font-weight: 500;
+    }
+
+    .nudge-cursor {
+      display: inline-block;
+      width: 3px; height: 14px;
+      background: #a78bfa;
+      margin-left: 2px;
+      vertical-align: text-bottom;
+      animation: blink 0.8s step-end infinite;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    .nudge-sources {
+      padding: 8px 16px 12px;
+      border-top: 1px solid rgba(255,255,255,0.03);
+    }
+    .nudge-sources-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: rgba(255,255,255,0.2);
+      margin-bottom: 6px;
+    }
+    .source-chip {
+      font-size: 11px;
+      color: #a78bfa;
+      background: rgba(167, 139, 250, 0.08);
+      padding: 3px 9px;
+      border-radius: 6px;
+      text-decoration: none;
+      border: 1px solid rgba(167, 139, 250, 0.12);
+      margin-right: 6px;
+    }
+
+    .nudge-actions {
+      display: flex; gap: 6px;
+      padding: 0 16px 14px;
+    }
+    .nudge-btn {
+      flex: 1;
+      padding: 8px 0;
+      border: none;
+      border-radius: 8px;
+      font-family: 'Inter', sans-serif;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .nudge-btn:hover { transform: scale(0.98); opacity: 0.85; }
+    .nudge-btn.helpful { background: #a78bfa; color: #000; }
+    .nudge-btn.more { background: #3f3f46; color: #e4e4e7; }
+    .nudge-btn.dismiss { background: transparent; color: #71717a; border: 1px solid #3f3f46; }
+
+    /* Scenario switcher */
+    .scenario-switcher {
+      position: fixed;
+      top: 20px; right: 20px;
+      z-index: 200;
+      display: flex; gap: 6px;
+    }
+    .scenario-btn {
+      padding: 8px 14px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 8px;
+      color: rgba(255,255,255,0.5);
+      font-family: 'Inter', sans-serif;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .scenario-btn:hover, .scenario-btn.active {
+      background: rgba(167, 139, 250, 0.12);
+      border-color: rgba(167, 139, 250, 0.3);
+      color: #a78bfa;
+    }
+
+    .friction-badge {
+      position: fixed;
+      top: 20px; left: 50%;
+      transform: translateX(-50%);
+      z-index: 200;
+      padding: 8px 20px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      font-family: 'Inter', sans-serif;
+      animation: fadeIn 0.3s ease forwards;
+      display: none;
+    }
+    .friction-badge.show { display: block; }
+    .friction-badge.high {
+      background: rgba(167, 139, 250, 0.12);
+      border: 1px solid rgba(167, 139, 250, 0.3);
+      color: #a78bfa;
+    }
+    .friction-badge.low {
+      background: rgba(74, 222, 128, 0.1);
+      border: 1px solid rgba(74, 222, 128, 0.2);
+      color: #4ade80;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+      to { opacity: 1; transform: translateX(-50%) translateY(0); }
+    }
+
+    /* Tier-specific nudge colors */
+    .nudge.hint { background: rgba(25, 35, 50, 0.96); }
+    .nudge.hint .nudge-dot { background: #7eb8da; box-shadow: 0 0 8px #7eb8da; }
+    .nudge.hint .nudge-tier { color: #7eb8da; }
+
+    .nudge.detail { background: rgba(30, 25, 50, 0.96); }
+    .nudge.detail .nudge-dot { background: #a78bfa; box-shadow: 0 0 8px #a78bfa; }
+    .nudge.detail .nudge-tier { color: #a78bfa; }
+
+    .nudge.deep_dive { background: rgba(45, 30, 20, 0.96); }
+    .nudge.deep_dive .nudge-dot { background: #f0a05a; box-shadow: 0 0 8px #f0a05a; }
+    .nudge.deep_dive .nudge-tier { color: #f0a05a; }
+  </style>
+</head>
+<body>
+  <div class="desktop-bg"></div>
+
+  <div class="taskbar">
+    <div class="taskbar-icon">🪟</div>
+    <div class="taskbar-icon">📁</div>
+    <div class="taskbar-icon active">💻</div>
+    <div class="taskbar-icon">🌐</div>
+    <div class="taskbar-icon" style="color: #a78bfa">◉</div>
+  </div>
+
+  <div class="fake-editor" id="editor">
+    <div class="editor-titlebar">
+      <div class="editor-dot r"></div>
+      <div class="editor-dot y"></div>
+      <div class="editor-dot g"></div>
+      <div class="editor-tab" id="editorTab">main.py — MyProject</div>
+    </div>
+    <div class="editor-content" id="editorContent"></div>
+  </div>
+
+  <div class="friction-badge" id="frictionBadge"></div>
+
+  <div class="scenario-switcher">
+    <button class="scenario-btn active" onclick="runScenario('python_error')">🐍 Error (Detail)</button>
+    <button class="scenario-btn" onclick="runScenario('git_conflict')">🔀 Conflict (Deep Dive)</button>
+    <button class="scenario-btn" onclick="runScenario('idle_browsing')">🌐 Browsing (Low Friction)</button>
+  </div>
+
+  <div class="nudge-container" id="nudgeContainer" style="display:none">
+    <div class="nudge detail" id="nudgeCard">
+      <div class="nudge-header">
+        <div class="nudge-dot"></div>
+        <span class="nudge-tier" id="nudgeTier">SUGGESTION</span>
+        <button class="nudge-close" onclick="dismissNudge()">✕</button>
+      </div>
+      <div class="friction-bar-row">
+        <span class="friction-label">Friction</span>
+        <div class="friction-track">
+          <div class="friction-fill" id="frictionFill" style="width: 72%"></div>
+        </div>
+        <span class="friction-pct" id="frictionPct">72%</span>
+      </div>
+      <div class="nudge-body">
+        <div class="nudge-text" id="nudgeText"></div>
+      </div>
+      <div class="nudge-sources" id="nudgeSources" style="display:none">
+        <div class="nudge-sources-label">Sources</div>
+        <div id="sourcesList"></div>
+      </div>
+      <div class="nudge-actions" id="nudgeActions" style="display:none">
+        <button class="nudge-btn helpful" onclick="feedback('engaged')">👍 Helpful</button>
+        <button class="nudge-btn more" onclick="feedback('expanded')">📖 More</button>
+        <button class="nudge-btn dismiss" onclick="feedback('dismissed')">Not now</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const scenarios = {
+      python_error: {
+        editorFile: 'main.py — MyProject',
+        editorCode: `<span class="ln"> 1</span><span class="kw">import</span> pandas <span class="kw">as</span> pd
+<span class="ln"> 2</span><span class="kw">import</span> numpy <span class="kw">as</span> np
+<span class="ln"> 3</span>
+<span class="ln"> 4</span><span class="kw">def</span> <span class="fn">process_data</span>(filepath):
+<span class="ln"> 5</span>    df = pd.<span class="fn">read_csv</span>(filepath)
+<span class="ln"> 6</span>    df[<span class="str">'price'</span>] = df[<span class="str">'price'</span>].<span class="fn">astype</span>(<span class="num">float</span>)
+<span class="ln"> 7</span>    <span class="cm"># TypeError: could not convert string to float: '$12.99'</span>
+<span class="ln"> 8</span>    <span class="err">result = df.groupby('category').agg({'price': 'mean'})</span>
+<span class="ln"> 9</span>    <span class="kw">return</span> result
+<span class="ln">10</span>
+<span class="ln">11</span><span class="cm"># Friction signals: typing hesitation, dwell on error line, 3 app switches</span>`,
+        tier: 'detail',
+        tierLabel: 'SUGGESTION',
+        friction: 72,
+        response: `Your <code>price</code> column contains currency symbols. <span class="highlight">Strip the "$" before casting</span>:\n\n<code>df['price'] = df['price'].str.replace('$', '', regex=False).astype(float)</code>\n\nThis removes the dollar sign first, then the conversion succeeds.`,
+        sources: [
+          { label: 'pandas docs', url: '#' },
+          { label: 'Stack Overflow', url: '#' },
+        ]
+      },
+      git_conflict: {
+        editorFile: 'utils.ts — WebApp',
+        editorCode: `<span class="ln"> 1</span><span class="cm">// utils.ts</span>
+<span class="ln"> 2</span><span class="kw">export function</span> <span class="fn">formatDate</span>(d: Date): string {
+<span class="ln"> 3</span><span class="err"><<<<<<< HEAD</span>
+<span class="ln"> 4</span>  <span class="kw">return</span> d.<span class="fn">toLocaleDateString</span>(<span class="str">'en-US'</span>);
+<span class="ln"> 5</span><span class="err">=======</span>
+<span class="ln"> 6</span>  <span class="kw">return</span> d.<span class="fn">toISOString</span>().<span class="fn">split</span>(<span class="str">'T'</span>)[<span class="num">0</span>];
+<span class="ln"> 7</span><span class="err">>>>>>>> feature/iso-dates</span>
+<span class="ln"> 8</span>}
+<span class="ln"> 9</span>
+<span class="ln">10</span><span class="cm">// Friction: high dwell, clipboard cycling, error keywords in title</span>`,
+        tier: 'deep_dive',
+        tierLabel: 'DEEP DIVE',
+        friction: 89,
+        response: `You have a <span class="highlight">merge conflict</span> in <code>formatDate</code>. The two branches differ:\n\n• <strong>HEAD</strong> — locale-formatted dates (<code>en-US</code>)\n• <strong>feature/iso-dates</strong> — ISO 8601 format\n\nIf your app uses an API, <span class="highlight">ISO format is safer</span> for data interchange. Keep the ISO version and format for display in the UI layer:\n\n<code>return d.toISOString().split('T')[0];</code>\n\nRemove the conflict markers (<code>&lt;&lt;&lt;</code>, <code>===</code>, <code>&gt;&gt;&gt;</code>) and commit.`,
+        sources: [
+          { label: 'Git SCM docs', url: '#' },
+          { label: 'MDN Date', url: '#' },
+        ]
+      },
+      idle_browsing: {
+        editorFile: 'Reddit — r/programming',
+        editorCode: `<span class="ln"> </span><span class="cm">// User is casually scrolling Reddit</span>
+<span class="ln"> </span>
+<span class="ln"> </span><span class="str">"TIL Rust's borrow checker was inspired by..."</span>
+<span class="ln"> </span><span class="str">"Show HN: I built a CLI tool for..."</span>
+<span class="ln"> </span><span class="str">"Why I switched from VS Code to Neovim"</span>
+<span class="ln"> </span><span class="str">"Unpopular opinion: tabs > spaces"</span>
+<span class="ln"> </span>
+<span class="ln"> </span><span class="cm">// Friction: low — smooth scrolling, no typing hesitation, no errors</span>`,
+        tier: 'hint',
+        tierLabel: 'Low Friction',
+        friction: 18,
+        response: '',
+        sources: []
+      }
+    };
+
+    let currentTimeout = null;
+    let currentTyping = null;
+
+    function clearPrevious() {
+      if (currentTimeout) clearTimeout(currentTimeout);
+      if (currentTyping) clearInterval(currentTyping);
+      document.getElementById('nudgeContainer').style.display = 'none';
+      document.getElementById('frictionBadge').className = 'friction-badge';
+      document.getElementById('nudgeActions').style.display = 'none';
+      document.getElementById('nudgeSources').style.display = 'none';
+      document.getElementById('nudgeText').innerHTML = '';
+    }
+
+    function runScenario(key) {
+      clearPrevious();
+      const s = scenarios[key];
+
+      document.querySelectorAll('.scenario-btn').forEach(b => b.classList.remove('active'));
+      event.target.classList.add('active');
+
+      document.getElementById('editorTab').textContent = s.editorFile;
+      document.getElementById('editorContent').innerHTML = s.editorCode;
+
+      currentTimeout = setTimeout(() => {
+        const badge = document.getElementById('frictionBadge');
+        if (s.friction > 50) {
+          badge.textContent = `◉ Friction: ${s.friction}% — nudging...`;
+          badge.className = 'friction-badge show high';
+        } else {
+          badge.textContent = `◉ Friction: ${s.friction}% — below threshold`;
+          badge.className = 'friction-badge show low';
+        }
+
+        if (s.friction < 50) return;
+
+        currentTimeout = setTimeout(() => {
+          const container = document.getElementById('nudgeContainer');
+          container.style.display = 'block';
+          container.style.animation = 'none';
+          container.offsetHeight;
+          container.style.animation = 'slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards';
+
+          // Set tier styling
+          const card = document.getElementById('nudgeCard');
+          card.className = `nudge ${s.tier}`;
+          document.getElementById('nudgeTier').textContent = s.tierLabel;
+          document.getElementById('frictionFill').style.width = `${s.friction}%`;
+          document.getElementById('frictionPct').textContent = `${s.friction}%`;
+          document.getElementById('nudgeText').innerHTML = '<span class="nudge-cursor"></span>';
+
+          // Stream text
+          let charIdx = 0;
+          const raw = s.response;
+          let displayed = '';
+          currentTyping = setInterval(() => {
+            for (let i = 0; i < 3 && charIdx < raw.length; i++) {
+              if (raw[charIdx] === '<') {
+                const closeIdx = raw.indexOf('>', charIdx);
+                if (closeIdx !== -1) {
+                  displayed += raw.substring(charIdx, closeIdx + 1);
+                  charIdx = closeIdx + 1;
+                } else displayed += raw[charIdx++];
+              } else if (raw[charIdx] === '\n') {
+                displayed += '<br>';
+                charIdx++;
+              } else displayed += raw[charIdx++];
+            }
+
+            document.getElementById('nudgeText').innerHTML = displayed + '<span class="nudge-cursor"></span>';
+
+            if (charIdx >= raw.length) {
+              clearInterval(currentTyping);
+              document.getElementById('nudgeText').innerHTML = displayed;
+
+              if (s.sources.length > 0) {
+                document.getElementById('sourcesList').innerHTML = s.sources.map(src =>
+                  `<a class="source-chip" href="${src.url}">${src.label}</a>`
+                ).join('');
+                document.getElementById('nudgeSources').style.display = 'block';
+              }
+              document.getElementById('nudgeActions').style.display = 'flex';
+            }
+          }, 20);
+        }, 800);
+      }, 1000);
+    }
+
+    function dismissNudge() {
+      const c = document.getElementById('nudgeContainer');
+      c.style.transition = 'transform 0.3s ease, opacity 0.3s ease';
+      c.style.transform = 'translateY(20px)';
+      c.style.opacity = '0';
+      setTimeout(() => {
+        c.style.display = 'none';
+        c.style.transition = ''; c.style.transform = ''; c.style.opacity = '';
+      }, 300);
+    }
+
+    function feedback(type) {
+      const btn = event.target;
+      if (type === 'engaged') {
+        btn.textContent = '✓ Thanks!';
+        btn.style.background = '#4ade80';
+      }
+      setTimeout(dismissNudge, 600);
+    }
+
+    window.addEventListener('load', () => {
+      document.querySelector('.scenario-btn.active').click();
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,1 @@
+# No external dependencies needed — Pulse topic extractor uses only stdlib

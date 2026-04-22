@@ -9,6 +9,7 @@ let storedScore = 0.5;
 Module.prototype.require = function (id: string) {
   if (id === 'electron') {
     return {
+      __esModule: true,
       app: { getPath: () => path.join(__dirname, '..', '.mock_user_data') },
     };
   }

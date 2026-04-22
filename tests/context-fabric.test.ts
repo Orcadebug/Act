@@ -10,6 +10,7 @@ let lastInsertedRow: any = null;
 Module.prototype.require = function (id: string) {
   if (id === 'electron') {
     return {
+      __esModule: true,
       app: { getPath: () => path.join(__dirname, '..', '.mock_user_data') },
       clipboard: { readText: () => 'mock clipboard' }
     };

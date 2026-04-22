@@ -1,3 +1,8 @@
+# Node / Electron
+node_modules/
+dist-electron/
+*.tsbuildinfo
+
 # Build outputs
 bin/
 obj/
